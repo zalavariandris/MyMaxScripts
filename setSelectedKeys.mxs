@@ -1,0 +1,49 @@
+-- Function to recursively find all subanims in the object
+fn getSubanims obj =
+(	
+	local subAnims = #()
+		
+	for i in 1 to (obj.numsubs) do(
+		append subAnims obj[i]
+		join subAnims (getSubAnims obj[i])
+	)
+	return subAnims
+)
+
+fn getBezierKeysForAllSubanims subanims = 
+(
+	local allKeys = #()
+	for sa in subanims do 
+	(
+		IsBezierFloat = classOf sa.controller == Bezier_Float
+		HasKeys = sa.keys != undefined
+		if (IsBezierFloat and HasKeys) do (join allKeys sa.keys)
+	)
+	return allKeys
+)
+
+fn setKeysInterpolation keys inTangentType outTangentType = 
+(
+	-- Iterate through all keys
+    for key in allKeys do
+    (
+		-- Set the interpolation of the key to Block
+		key.inTangentType = inTangentType
+		key.outTangentType = outTangentType
+    )
+)
+
+fn setSelectedKeysToBlock = 
+(
+	local allSubanims =  #()
+	for obj in selection do 
+	(
+		join allSubanims (getSubanims obj)
+	)
+	local keys = getBezierKeysForAllSubanims allSubanims
+	local selectedKeys = for key in keys where key.selected collect key
+	print(selectedKeys)
+	--local allKeys = getBezierKeysForAllSubanims allSubanims
+	--local selectedKeys = for key in allKeys where key.selected collect key
+	--setKeysInterpolation selectedKeys #auto #auto
+)

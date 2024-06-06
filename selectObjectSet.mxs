@@ -1,0 +1,79 @@
+fn findAllSelectionSetsForObject obj =
+(
+    local setsContainingObj = #() -- Array to hold names of sets containing the object
+
+    -- Get all named selection sets
+    local allSelectionSets = selectionSets.names
+
+    -- Iterate through all selection sets
+    for setName in allSelectionSets do
+    (
+        -- Get the objects in the current selection set
+        local setObjects = selectionSets[setName]
+
+        -- Check if the object is in the current selection set
+        if (findItem setObjects obj) != 0 then
+        (
+            append setsContainingObj setName -- Add the set name to the result array
+        )
+    )
+
+    return setsContainingObj -- Return the array of selection set names
+)
+
+fn findSelectionSetForObject obj =
+(
+    -- Get all named selection sets
+    local allSelectionSets = selectionSets.names
+
+    -- Iterate through all selection sets
+    for setName in allSelectionSets do
+    (
+        -- Get the objects in the current selection set
+        local setObjects = selectionSets[setName]
+
+        -- Check if the object is in the current selection set
+        if (findItem setObjects obj) != 0 then
+        (
+			return setName;
+        )
+    )
+
+    return setsContainingObj -- Return the array of selection set names
+)
+
+fn findAllSelectionSetsForObjects objs =
+(
+    local setsContainingObj = #() -- Array to hold names of sets containing the object
+
+    -- Get all named selection sets
+    local allSelectionSets = selectionSets
+
+    -- Iterate through all selection sets
+    for selectionSet in allSelectionSets do
+    (
+        -- Get the objects in the current selection set
+
+        -- Check if the object is in the current selection set
+		for obj in objs do
+		(
+			if (findItem selectionSet obj) != 0 then
+			(
+				append setsContainingObj selectionSet -- Add the set name to the result array
+			)
+		)
+    )
+
+    return setsContainingObj -- Return the array of selection set names
+)
+
+fn selectObjectsSet objects = 
+(
+	local allSetsForObjects = findAllSelectionSetsForObjects objects
+	local objectsToSelect = #()
+	for selectionSet in allSetsForObjects do 
+	(
+		join objectsToSelect selectionSet
+	)
+	select objectsToSelect
+)

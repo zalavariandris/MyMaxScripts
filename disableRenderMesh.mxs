@@ -1,0 +1,17 @@
+---
+-- Disable render mseh in viewport for specified shapes
+--
+-- example usage:
+-- disableRenderMeshForShapes($selection)
+---
+fn disableRenderMeshForShapes shapesArray =
+(
+	for obj in shapesArray do
+	(
+		if superclassof obj == Shape do
+		(
+			obj.render_displayRenderMesh = false
+		)
+	)
+)
+

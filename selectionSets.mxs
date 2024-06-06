@@ -1,0 +1,23 @@
+-- Define the rollout panel
+rollout selectionSetsRollout "Selection Sets" (
+    -- Dynamically add buttons for each selection set
+	
+    on selectionSetsRollout open do (
+        for setName in selSets do (
+			local selSets = for i = 1 to selectionSets.count collect selectionSets[i]
+            -- Create a local scope to ensure the button variable is unique
+            local btn = button text:setName width:200
+
+            -- Define the button event handler
+            on btn pressed do (
+                select (getNodeByName setName)
+            )
+
+            -- Add the button to the rollout panel
+            selectionSetsRollout.addControl btn
+        )
+    )
+)
+
+-- Create the dialog
+createDialog selectionSetsRollout

@@ -1,0 +1,36 @@
+---
+-- Set selected keys to stepped
+--
+-- Example usage: Apply the function to all selected objects
+-- setKeysToStepped selection
+---
+
+fn setKeysToStepped objs = (
+    -- Define a helper function to set keys to stepped for a given controller
+    fn setControllerKeysToStepped controller = (
+        if iskindof controller Position_XYZ or iskindof controller Euler_XYZ or iskindof controller Bezier_Scale then (
+            for k = 1 to controller.keys.count do (
+                controller.keys[k].inTangentType = #step
+                controller.keys[k].outTangentType = #step
+            )
+        )
+    )
+    
+    -- Iterate over all provided objects
+    for obj in objs do (
+        -- Check if the object has animation keys
+        if isvalidnode obj then (
+            -- Get the controller for each transform property
+            local controllers = #(obj.position.controller, obj.rotation.controller, obj.scale.controller)
+            
+            for controller in controllers do (
+                setControllerKeysToStepped controller
+            )
+        )
+    )
+
+    -- Refresh the UI to reflect changes
+    redrawViews()
+)
+
+
