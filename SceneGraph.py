@@ -46,8 +46,6 @@ class UniversalPort(MaxPort):
     def disconnect(self, source, target):
         self.disconnector(self, source, target)
 
-
-
 class MaxChildrenPort(MaxPort):
     def connect(self, source, target):
         raise NotImplementedError
@@ -102,47 +100,85 @@ def connect_property(max_port:"MaxPort", source:"mxs.Controller", target:"mxs.En
 def disconnect_property(max_port, source, target):
     pass
 
-def connect_subanim(max_port, source, target):
-    print("connect subanim", max_port, source, target)
+def connect_subanim_controller(max_port, source, target):
+    print("connect subanim controller", max_port, source, target)
     try:
-        subanim = rt.getsubanim(target, max_port.subanim_idx)
-        subanim.con = source
+        subanim = rt.getSubAnim(target, max_port.subanim_idx)
+        subanim.controller = source
     except Exception as err:
         print("cant connect subanim", inlet, err)
 
-def disconnect_subanim(max_port, source, target):
+def disconnect_subanim_controller(max_port, source, target):
+    pass
+
+def connect_subanim_object(max_port, source, target):
+    print("connect subanim object", max_port, source, target)
+    try:
+        subanim = rt.getSubAnim(target, max_port.subanim_idx)
+        print("current object", subanim.object)
+        target.setmxsprop(max_port.name, source)
+        # subanim.object = source
+    except Exception as err:
+        print("cant connect subanim", inlet, err)
+
+def disconnect_subanim_object(max_port, source, target):
+    pass
+
+def connect_material(max_port, source, target):
+    pass
+
+def disconnect_material(max_port, source, target):
     pass
 
 
 def get_ports(max_entity):
+    # print()
+    # print("get subanim", max_entity)
     if rt.isValidNode(max_entity):
         # yield children 
-        yield UniversalPort(name="children", target=max_entity, source=[child for child in max_entity.children], multi=True, connector=connect_child, disconnector=disconnect_child)
+        # yield UniversalPort(name="children", target=max_entity, source=[child for child in max_entity.children], multi=True, connector=connect_child, disconnector=disconnect_child)
+
+        # yield tranform
+        subanim = rt.getSubAnim(max_entity, 3)
+        transform_port = UniversalPort(name=subanim.name, target=max_entity, source=subanim.controller, connector=connect_subanim_controller, disconnector=disconnect_subanim_controller)
+        transform_port.subanim_idx = 3
+        yield transform_port
+
+        # yield UniversalPort(name="baseobject", target=max_entity, source=max_entity.baseobject, connector=connect_baseobject, disconnector=disconnect_baseobject)
         
-        # yield subanims
-        # subanims = [for i in range(1, max_entity.numsubs+1)]
-
-        for i in range(1, max_entity.numsubs+1):
-            subanim = rt.getSubanim(max_entity, i) 
-
-            if subanim.name in ("Transform", "Visibility"):
-                port = UniversalPort(name=subanim.name, target=max_entity, source=subanim.object, connector=connect_subanim, disconnector=disconnect_subanim)
-                port.subanim_idx = i
-                yield port
-                    # yield MaxSubanimPort(name=subanim.name, target=max_entity, source=subanim.controller)
-                # elif subanim.name == "Visibility":
-                #     yield MaxSubanimPort(name=subanim.name, target=max_entity, source=subanim.controller)
-
-        yield UniversalPort(name="baseobject", target=max_entity, source=max_entity.baseobject, connector=connect_baseobject, disconnector=disconnect_baseobject)
+        # yield UniversalPort(name="material", target=max_entity, source=max_entity.material, connector=connect_material, disconnector=disconnect_material)
 
 
     else:
-        # yield dynamic properties
-        prop_names = [str(prop_name) for prop_name in rt.getPropNames(max_entity) if rt.isPropertyAnimatable(max_entity, prop_name)]
-        for prop_name in prop_names:
-            prop_controller = rt.getPropertyController(max_entity, prop_name)
-            yield UniversalPort(name=prop_name, target=max_entity, source=prop_controller, connector=connect_property, disconnector=disconnect_property)
-            # yield MaxPropPort(name=prop_name, target=max_entity, source=prop_controller)
+        # for i in range(1, max_entity.numsubs+1):
+        #     subanim = rt.getSubanim(max_entity, i)
+
+            
+        #     # skip subanims when a parent is a paramblock. these subanims will be included with parameters
+        #     if subanim.parent != max_entity: 
+        #         continue
+
+        #     # if subanim.name in ("Transform", "Visibility"):
+        #     subanim_name = rt.getSubAnimName(max_entity, i, asString=True)
+        #     name_without_value = subanim_name.split(":")[0]
+        #     if name_without_value:
+        #         if subanim.object:
+        #             port = UniversalPort(name=name_without_value, target=max_entity, source=subanim.controller, connector=connect_subanim_controller, disconnector=disconnect_subanim_controller)
+        #             port.subanim_idx = i
+        #             yield port
+
+
+        # yield animatable properties
+        for prop_name in rt.getPropNames(max_entity):
+            if rt.isPropertyAnimatable(max_entity, prop_name):
+                prop_controller = rt.getPropertyController(max_entity, prop_name)
+                yield UniversalPort(name=str(prop_name), target=max_entity, source=prop_controller, connector=connect_property, disconnector=disconnect_property)
+
+        # yield constraint interface
+        print("interfaces for ", max_entity)
+        for interface in rt.getInterfaces(max_entity):
+            print(interface)
+
 
         
 def bfs(roots):
@@ -196,8 +232,10 @@ class SceneGraphDocker(QtWidgets.QDockWidget):
         super(SceneGraphDocker, self).__init__(parent)
 
         # set this widget 
-        self.setAllowedAreas(QtCore.Qt.NoDockWidgetArea)
+        self.setAllowedAreas(QtCore.Qt.AllDockWidgetAreas)
         self.setWindowTitle("Scene Graph")
+        self.setWindowFlags(QtCore.Qt.Tool)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         
 
         # create graph controller
@@ -216,6 +254,9 @@ class SceneGraphDocker(QtWidgets.QDockWidget):
         toolBar = main_window.addToolBar("hello")
         action = toolBar.addAction("->")
         self.setWidget(main_window)
+
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum);
+        self.setMinimumSize(512,510);
 
     def fitInView(self, nodes=[]):
         viewer = self.graph.widget.widget(0)
@@ -274,20 +315,20 @@ class SceneGraphDocker(QtWidgets.QDockWidget):
 
 
     def on_port_disconnected(self, inlet, outlet):
-        # if isinstance(inlet.data, MaxChildrenPort):
-        #     try:
-        #         # get target_port
-        #         source_entity = outlet.node().data
+        if isinstance(inlet.data, MaxChildrenPort):
+            try:
+                # get target_port
+                source_entity = outlet.node().data
 
-        #         target_max_port = inlet.data
-        #         target_entity = inlet.node().data
+                target_max_port = inlet.data
+                target_entity = inlet.node().data
                 
 
-        #         print("disconnect", source_entity, "to", target_entity, target_max_port)
-        #         source_entity.parent = None
-        #     except Exception as err:
-        #         print("cant disconnect port", err)
-        #         # TODO handle port that cannot be disconnected?
+                print("disconnect", source_entity, "to", target_entity, target_max_port)
+                source_entity.parent = None
+            except Exception as err:
+                print("cant disconnect port", err)
+                # TODO handle port that cannot be disconnected?
 
         if isinstance(inlet.data, UniversalPort):
             try:
@@ -397,15 +438,17 @@ class SceneGraphDocker(QtWidgets.QDockWidget):
         # self.graph.center_on()
 
 
+if __name__ == "__main__":
+    from PySide2.QtWidgets import *
 
-from PySide2.QtWidgets import *
+    max_window = GetQMaxMainWindow()
+    w = max_window.findChild(QDockWidget, "TheSceneGraph")
+    if w:
+        w.deleteLater()
 
-max_window = GetQMaxMainWindow()
-w = max_window.findChild(QDockWidget, "TheSceneGraph")
-if w:
-    w.deleteLater()
-
-w = SceneGraphDocker(max_window)
-w.setObjectName("TheSceneGraph")
-w.setFloating(True)
-w.show()
+    w = SceneGraphDocker(max_window)
+    w.setObjectName("TheSceneGraph")
+    max_window.addDockWidget(QtCore.Qt.LeftDockWidgetArea,w)
+    w.move(100,0)
+    w.setFloating(False)
+    w.show()
