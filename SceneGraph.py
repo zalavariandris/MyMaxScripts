@@ -16,7 +16,7 @@ from typing import List, Any
 from collections import deque
 from enum import Enum
 from dataclasses import dataclass
-
+from collections.abc import Iterable
 
 class COLOR:
     ENTITY = [236/3,236/3,239/3]
@@ -30,7 +30,7 @@ class COLOR:
     INTERFACE =  [150/3,242/3,215/3]
 
 
-class MaxBaseEntity:
+class MaxEntity:
     def __init__(self, wrap:"mxs.Entity"):
         self.wrapped = wrap
 
@@ -66,10 +66,10 @@ class MaxBaseEntity:
                 return MaxController(wrap=native_entity)
 
         else:
-            return MaxBaseEntity(wrap=native_entity)
+            return MaxEntity(wrap=native_entity)
 
     @staticmethod
-    def bfs(roots):
+    def bfs(roots: "mxs.Entity"):
         queue = deque()
         explored = set()
 
@@ -81,9 +81,9 @@ class MaxBaseEntity:
         
         # While queue is not empty
         while queue:
-            max_entity = queue.popleft()
+            native_entity = queue.popleft()
             
-            for max_port in MaxBaseEntity.create(max_entity).get_ports():
+            for max_port in MaxEntity.create(native_entity).inlets():
                 for source_item in max_port.get_sources():
                     explored.add(source_item)
                     queue.append(source_item)
@@ -93,20 +93,20 @@ class MaxBaseEntity:
 
     def get_subanim_controller_ports(self):
         for subanim_idx in range(1, self.wrapped.numsubs+1):
-            yield SubanimControllerPort(owner=self.wrapped, subanim_idx=subanim_idx)
+            yield SubanimControllerInlet(owner=self.wrapped, subanim_idx=subanim_idx)
 
     def get_animatable_property_ports(self):
         for prop_name in rt.getPropNames(self.wrapped):
             if rt.isPropertyAnimatable(self.wrapped, prop_name):
-                yield PropertyControllerPort(owner=self.wrapped, prop_name=prop_name)
+                yield PropertyControllerInlet(owner=self.wrapped, prop_name=prop_name)
 
-    def get_ports(self):
+    def inlets(self):
         if rt.isValidNode(self.wrapped):
             """Yield Children"""
-            yield ChildrenPort(owner=self.wrapped)
-            yield SubanimControllerPort(owner=self.wrapped, subanim_idx=3)
-            yield BaseObjectPort(owner=self.wrapped)
-            yield MaterialPort(owner=self.wrapped)
+            yield ChildrenInlet(owner=self.wrapped)
+            yield SubanimControllerInlet(owner=self.wrapped, subanim_idx=3)
+            yield BaseObjectInlet(owner=self.wrapped)
+            yield MaterialInlet(owner=self.wrapped)
 
         else:
             """
@@ -128,36 +128,41 @@ class MaxBaseEntity:
             # if rt.classOf(self.wrapped) in [rt.Float_Expression, rt.Point3_Expression, rt.Position_Expression, rt.Scale_Expression]:
             #     for i in range(1, self.wrapped.NumScalars()+1):
             #         if self.wrapped.GetScalarType(i) == rt.Name("scalarTarget"):
-            #             yield IExprScalarTargetPort(owner=self.wrapped, idx=i)
+            #             yield IExprScalarTargetInlet(owner=self.wrapped, idx=i)
             #             # subanim = self.wrapped.GetScalarTarget(i)
             #             # scalar_name = self.wrapped.GetScalarName(i)
             #             # yield MaxPort(name=str(scalar_name), target = self.wrapped, source=subanim.controller)
 
             #     for i in range(1, self.wrapped.NumVectors()+1):
             #         if self.wrapped.GetVectorType(i) == rt.Name("vectorTarget"):
-            #             yield IExprVectorTargetPort(owner=self.wrapped, idx=i)
+            #             yield IExprVectorTargetInlet(owner=self.wrapped, idx=i)
+
+    def outlets(self):
+        for subanim_idx in range(1, self.wrapped.numsubs+1):
+            yield SubanimOutlet(owner=self.wrapped, subanim_idx=subanim_idx)
 
 
-class MaxNodeEntity(MaxBaseEntity):
-    def get_ports(self):
+
+class MaxNodeEntity(MaxEntity):
+    def inlets(self):
         """Yield Children"""
-        yield ChildrenPort(owner=self.wrapped)
-        yield SubanimControllerPort(owner=self.wrapped, subanim_idx=3)
-        yield BaseObjectPort(owner=self.wrapped)
-        yield MaterialPort(owner=self.wrapped)
+        yield ChildrenInlet(owner=self.wrapped)
+        yield SubanimControllerInlet(owner=self.wrapped, subanim_idx=3)
+        yield BaseObjectInlet(owner=self.wrapped)
+        yield MaterialInlet(owner=self.wrapped)
 
     def color(self):
         return COLOR.NODE
 
 
-class MaxMaterial(MaxBaseEntity):
-    def get_ports(self):
-        for port in super().get_ports():
+class MaxMaterial(MaxEntity):
+    def inlets(self):
+        for port in super().inlets():
             yield port
 
 
-class MaxBaseObject(MaxBaseEntity):
-    def get_ports(self):
+class MaxBaseObject(MaxEntity):
+    def inlets(self):
         for port in self.get_animatable_property_ports():
             yield port
 
@@ -165,8 +170,8 @@ class MaxBaseObject(MaxBaseEntity):
         return COLOR.OBJECT
 
 
-class MaxController(MaxBaseEntity):
-    def get_ports(self):
+class MaxController(MaxEntity):
+    def inlets(self):
         # for port in self.get_animatable_property_ports():
         #     yield port
         for port in self.get_subanim_controller_ports():
@@ -180,33 +185,33 @@ class MaxIExprController(MaxController):
     """
     maxscript docs: https://help.autodesk.com/view/MAXDEV/2022/ENU/?guid=GUID-FC68369C-232D-4040-B223-F67978A4A5A1
     """
-    def get_ports(self):
+    def inlets(self):
         for i in range(1, self.wrapped.NumScalars()+1):
             scalarType = self.wrapped.GetScalarType(i)
             if scalarType in[rt.Name("scalarTarget"), rt.Name("scalarConstant")]:
-                yield IExprScalarTargetPort(owner=self.wrapped, idx=i)
+                yield IExprScalarTargetInlet(owner=self.wrapped, idx=i)
 
         for i in range(1, self.wrapped.NumVectors()+1):
             vectorType = self.wrapped.GetVectorType(i)
             if vectorType in [rt.Name("vectorTarget"), rt.Name("vectorConstant")]:
-                yield IExprVectorTargetPort(owner=self.wrapped, idx=i)
+                yield IExprVectorTargetInlet(owner=self.wrapped, idx=i)
 
 
 class MaxScriptController(MaxController):
     """
     maxscript docs: https://help.autodesk.com/view/MAXDEV/2022/ENU/?guid=GUID-569BE1BC-216E-496F-9EDE-1E8D2DB42194
     """
-    def get_ports(self):
+    def inlets(self):
         # first 4 variables are builtins: T S F NT
         for i in range(5, self.wrapped.NumVariables()+1):
             variable_type = self.wrapped.GetType(i)
 
             if variable_type == rt.Name("constant"):
-                yield IScriptVariablePort(owner=self.wrapped, idx=i)
+                yield IScriptVariableInlet(owner=self.wrapped, idx=i)
             elif variable_type == rt.Name("object"):
-                yield IScriptVariablePort(owner=self.wrapped, idx=i)
+                yield IScriptVariableInlet(owner=self.wrapped, idx=i)
             elif variable_type == rt.Name("node"):
-                yield IScriptVariablePort(owner=self.wrapped, idx=i)
+                yield IScriptVariableInlet(owner=self.wrapped, idx=i)
             elif variable_type == rt.Name("target"): #subanim track
                 pass 
 
@@ -214,20 +219,20 @@ class MaxListController(MaxController):
     """
     maxscript docs: https://help.autodesk.com/view/MAXDEV/2022/ENU/?guid=GUID-ED23BCBD-2344-4DFB-BA5A-ABAF04951164
     """
-    def get_ports(self):
+    def inlets(self):
         """list controllers"""
         for i in range(1, self.wrapped.getCount()+1):
             name = self.wrapped.getName(i)
-            yield ListItemPort(owner=self.wrapped, subanim_idx=i)
+            yield ListItemInlet(owner=self.wrapped, subanim_idx=i)
 
         """list weights"""
         for name in rt.GetPropNames(self.wrapped.weights):
             for i in range(1, self.wrapped.weights.numsubs+1):
                 weight_subanim = rt.getSubAnim(self.wrapped.weights, i)
-                yield SubanimControllerPort(owner=self.wrapped.weights, subanim_idx=i)
+                yield SubanimControllerInlet(owner=self.wrapped.weights, subanim_idx=i)
 
         """yield available port"""
-        yield ListAvailablePort(owner=self.wrapped)
+        yield ListAvailableInlet(owner=self.wrapped)
 
 
 class MaxWireController(MaxController):
@@ -236,12 +241,12 @@ class MaxWireController(MaxController):
     also:
     https://help.autodesk.com/view/MAXDEV/2022/ENU/?guid=GUID-2F2F1393-AB2C-45B9-B7D0-AB452115EDC9
     """
-    def get_ports(self):
+    def inlets(self):
         for i in range(1, self.wrapped.numWires+1):
-            yield DummyPort(owner=self, name=F"wireParent{i}", sources=self.wrapped.getWireParent(i))
-            # yield DummyPort(owner=self, name=F"CoController{i}", sources=self.wrapped.getCoController(i))
+            yield DummyInlet(owner=self, name=F"wireParent{i}", sources=[self.wrapped.getWireParent(i)])
+            # yield DummyInlet(owner=self, name=F"CoController{i}", sources=self.wrapped.getCoController(i))
 
-        # yield DummyPort(owner=self, name="drivenAnimation", sources=self.wrapped.drivenAnimation)
+        # yield DummyInlet(owner=self, name="drivenAnimation", sources=self.wrapped.drivenAnimation)
 
 
         # self.wrapped.drivenAnimation
@@ -254,7 +259,7 @@ class MaxWireController(MaxController):
         # getCoController i
         # getWireParent i
         # getWireSubnum i
-        # return iter([])
+        
 
 def is_wire_controller(native_entity):
     return True if rt.getInterface(native_entity, "wireController") else False
@@ -283,12 +288,13 @@ def is_script_controller(native_entity):
 def is_list_controller(native_entity):
     return True if rt.getInterface(native_entity, "list") else False
 
-class ChildrenPort:
+
+class ChildrenInlet:
     def __init__(self, owner:"mxs.Node"):
         self.owner = owner
 
     def __repr__(self):
-        return f"ChildrenPort()"
+        return f"ChildrenInlet()"
 
     @property
     def name(self):
@@ -320,8 +326,11 @@ class ChildrenPort:
         except Exception as err:
             print("cant disconnect baseobject", err)
 
-class DummyPort:
+
+class DummyInlet:
     def __init__(self, owner, name, sources=[]):
+        assert isinstance(name, str)
+        assert isinstance(sources, Iterable)
         self.owner = owner
         self._name = name
         self._sources = sources
@@ -335,7 +344,7 @@ class DummyPort:
         return True
 
     def __repr__(self):
-        return f"DummyPort({self.name})"
+        return f"DummyInlet({self.name})"
 
     def get_sources(self):
         return self._sources
@@ -350,14 +359,13 @@ class DummyPort:
         raise NotImplementedError
 
 
-
-class SubanimControllerPort:
+class SubanimControllerInlet:
     def __init__(self, owner:"mxs.Node", subanim_idx):
         self.owner = owner
         self.subanim_idx = subanim_idx
 
     def __repr__(self):
-        return f"SubanimControllerPort({self.name})"
+        return f"SubanimControllerInlet({self.name})"
 
     @property
     def name(self):
@@ -395,11 +403,11 @@ class SubanimControllerPort:
             print("cant connect subanim", self, err)
 
 
-class ListItemPort(SubanimControllerPort):
+class ListItemInlet(SubanimControllerInlet):
     pass
 
 
-class ListAvailablePort:
+class ListAvailableInlet:
     """
     maxscript docs: https://help.autodesk.com/view/MAXDEV/2022/ENU/?guid=GUID-ED23BCBD-2344-4DFB-BA5A-ABAF04951164
     """
@@ -407,14 +415,14 @@ class ListAvailablePort:
         self.owner = owner
 
     def __repr__(self):
-        return f"ListAvailablePort()"
+        return f"ListAvailableInlet()"
 
     @property
     def name(self):
         return "available"
 
     def __repr__(self):
-        return f"MaterialPort()"
+        return f"MaterialInlet()"
 
     @property
     def multi(self):
@@ -438,13 +446,13 @@ class ListAvailablePort:
         raise Exception("ListController's available port should never be disconnected. It's a placeholder to add new items to the list controller.")
 
 
-class ListWeightPort:
+class ListWeightInlet:
     def __init__(self, owner:"mxs.Node", idx):
         self.owner = owner
         self._idx = idx
 
     def __repr__(self):
-        return f"ListWeightPort({self.name})"
+        return f"ListWeightInlet({self.name})"
 
     @property
     def name(self):
@@ -469,13 +477,13 @@ class ListWeightPort:
         raise NotImplementedError
 
 
-class PropertyControllerPort:
+class PropertyControllerInlet:
     def __init__(self, owner:"mxs.Node", prop_name):
         self.owner = owner
         self._prop_name = prop_name
 
     def __repr__(self):
-        return f"PropertyControllerPort({self.name})"
+        return f"PropertyControllerInlet({self.name})"
 
     @property
     def name(self):
@@ -571,12 +579,12 @@ def new_default_controller_for_superclass(superclass):
             raise Exception("no default controller for", superclass)
 
 
-class BaseObjectPort:
+class BaseObjectInlet:
     def __init__(self, owner:"mxs.Node"):
         self.owner = owner
 
     def __repr__(self):
-        return f"BaseObjectPort()"
+        return f"BaseObjectInlet()"
 
     @property
     def name(self):
@@ -603,12 +611,12 @@ class BaseObjectPort:
         print("disconnect", self, source)
 
 
-class MaterialPort:
+class MaterialInlet:
     def __init__(self, owner:"mxs.Node"):
         self.owner = owner
 
     def __repr__(self):
-        return f"MaterialPort()"
+        return f"MaterialInlet()"
 
     @property
     def name(self):
@@ -635,7 +643,7 @@ class MaterialPort:
         print("disconnect", self, source)
 
 
-class IExprScalarTargetPort:
+class IExprScalarTargetInlet:
     """
     https://help.autodesk.com/view/MAXDEV/2024/ENU/?guid=GUID-FC68369C-232D-4040-B223-F67978A4A5A1
     """
@@ -668,7 +676,7 @@ class IExprScalarTargetPort:
         pass
 
 
-class IExprVectorTargetPort:
+class IExprVectorTargetInlet:
     """
     https://help.autodesk.com/view/MAXDEV/2024/ENU/?guid=GUID-FC68369C-232D-4040-B223-F67978A4A5A1
     """
@@ -703,7 +711,7 @@ class IExprVectorTargetPort:
         pass
 
 
-class IScriptVariablePort:
+class IScriptVariableInlet:
     """
     https://help.autodesk.com/view/MAXDEV/2024/ENU/?guid=GUID-FC68369C-232D-4040-B223-F67978A4A5A1
     """
@@ -748,6 +756,31 @@ class IScriptVariablePort:
         pass
 
 
+class SelfOutlet:
+    def __init__(self, owner:"mxs.Node"):
+        self.owner = owner
+
+    def __repr__(self):
+        return f"SelfOutlet({self.owner})"
+
+    @property
+    def name(self):
+        return "self"
+
+
+class SubanimOutlet:
+    def __init__(self, owner:"mxs.Node", subanim_idx):
+        self.owner = owner
+        self.subanim_idx = subanim_idx
+
+    def __repr__(self):
+        return f"SubanimOutlet({self.name})"
+
+    @property
+    def name(self):
+        return str(rt.getSubAnim(self.owner, self.subanim_idx).name)
+
+
 # Node Graph Widgets
 class SceneNode(BaseNode):
     __identifier__ = 'nodes.max'
@@ -775,8 +808,6 @@ class EntityInspector(QWidget):
         for i in reversed(range(self.layout().count())): 
             child = self.layout().itemAt(i).widget()
             child.setParent(None)
-
-
             
     def set_entities(self, native_entities):
         self.clear()
@@ -787,7 +818,7 @@ class EntityInspector(QWidget):
             self.title.setText( "<nothing selected>")
         elif len(native_entities) == 1:
             native_entity = native_entities[0]
-            entity = MaxBaseEntity.create(native_entity)
+            entity = MaxEntity.create(native_entity)
 
             if isinstance(entity, MaxIExprController):
                 """expression editor widget"""
@@ -807,12 +838,12 @@ class EntityInspector(QWidget):
                         print(err)
 
         else:
-            entities = [MaxBaseEntity.create(native_entity) for native_entity in native_entities]
+            entities = [MaxEntity.create(native_entity) for native_entity in native_entities]
             AllSameClass = all_equal(type(entity) for entity in entities)
 
             self.title.setText(entities[0].name()+"..." if AllSameClass else "<multiple different types>")
             if AllSameClass:
-                entities = [MaxBaseEntity.create(native_entity) for native_entity in native_entities]
+                entities = [MaxEntity.create(native_entity) for native_entity in native_entities]
                 if isinstance(entities[0], MaxIExprController):
                     """expression editor widget"""
                     expression_editor = QPlainTextEdit(self)
@@ -852,7 +883,8 @@ def suffix_duplicates(names):
 class SceneGraphDocker(QDockWidget):
     def __init__(self, parent=None):
         self.node_from_anim_handle = dict() # map nodes to max entityes {anim_handle: node}
-        self.port_from_handle_name = dict() # map ports to max properties... {(anim_handle, name): port}
+        self.inlet_from_handle_and_name = dict() # map ports to max properties... {(anim_handle, name): port}
+        self.outlet_from_handle_and_name = dict()
         # qtmax.DisableMaxAcceleratorsOnFocus(self, True)
 
         super(SceneGraphDocker, self).__init__(parent)
@@ -896,8 +928,12 @@ class SceneGraphDocker(QDockWidget):
         remove_action = toolBar.addAction("layout all")
         remove_action.triggered.connect(self.layout_all_nodes)
 
-        remove_action = toolBar.addAction("layout selected")
-        remove_action.triggered.connect(self.layout_selected_nodes)
+        layout_selected = toolBar.addAction("layout selected")
+        layout_selected.triggered.connect(self.layout_selected_nodes)
+
+
+        open_controller_dialog = toolBar.addAction("open controller dialog")
+        open_controller_dialog.triggered.connect(self.open_controller_dialog)
 
 
         self.setWidget(main_window)
@@ -913,6 +949,17 @@ class SceneGraphDocker(QDockWidget):
             return entities[0]
         else:
             return entities
+
+    @Slot()
+    def open_controller_dialog(self):
+        entities = [node.data for node in scenegraph.graph.selected_nodes()]
+        if len(entities)>0:
+            controller = entities[0]
+            if rt.isController(controller):
+                try:
+                    rt.displayControlDialog(controller, f"{rt.getClassName(controller)}")
+                except Exception as err:
+                    print(err)
 
     @Slot()
     def layout_all_nodes(self):
@@ -939,7 +986,7 @@ class SceneGraphDocker(QDockWidget):
         new_entities = []
         for node in selected_nodes:
             entity = node.data
-            for max_port in MaxBaseEntity.create(entity).get_ports():
+            for max_port in MaxEntity.create(entity).inlets():
                 for source_entity in max_port.get_sources():
                     if rt.GetHandleByAnim(source_entity) not in handles_in_graph:
                         new_entities.append(source_entity)
@@ -1011,11 +1058,11 @@ class SceneGraphDocker(QDockWidget):
     # Max Callbacks
     def node_created_callback(self):
         notification = rt.callbacks.notificationParam()
-        # print("node created callback", notification)
+        print("node created callback", notification)
 
     def node_deleted_callback(self):
         notification = rt.callbacks.notificationParam()
-        # print("node delete callback", notification)
+        print("node delete callback", notification)
 
         for node in self.graph.all_nodes():
             native_entity = node.data
@@ -1033,51 +1080,58 @@ class SceneGraphDocker(QDockWidget):
 
     def node_selected_callback(self):
         notification = rt.callbacks.notificationParam()
-        # print("node selected callback", notification)
+        print("node selected callback", notification)
         # self.update_graph()
 
     def node_linked_callback(self):
         notification = rt.callbacks.notificationParam()
-        # print("node linked callback", notification)
+        print("node linked callback", notification)
         # self.update_graph()
 
     def node_unlinked_callback(self):
         notification = rt.callbacks.notificationParam()
-        # print("node unlinked callback", notification)
+        print("node unlinked callback", notification)
         # self.update_graph()
 
     def add_entity_to_graph(self, native_entity):
         if rt.GetHandleByAnim(native_entity) in self.node_from_anim_handle.keys():
             return
+        max_entity = MaxEntity.create(native_entity)
         # create the node from max object
         node = BaseNode() #self.graph.create_node('nodes.max.SceneNode', native_entity.name, selected=False, push_undo=False)
         node.data = native_entity
         self.node_from_anim_handle[rt.GetHandleByAnim(native_entity)] = node
 
         # create input ports
-        ports = [port for port in MaxBaseEntity.create(native_entity).get_ports()]
-        port_names_with_indices = suffix_duplicates([port.name for port in ports])
-        for max_port, suffixed_port_name in zip(ports, port_names_with_indices):
-            input_port = node.add_input(suffixed_port_name, multi_input=max_port.multi)
-            input_port.data=max_port
-            self.port_from_handle_name[(rt.GetHandleByAnim(native_entity), suffixed_port_name)] = input_port
+        inlets = [port for port in MaxEntity.create(native_entity).inlets()]
+        inlet_names_with_indices = suffix_duplicates([port.name for port in inlets])
+        for inlet, suffixed_inlet_name in zip(inlets, inlet_names_with_indices):
+            node_input = node.add_input(suffixed_inlet_name, multi_input=inlet.multi)
+            node_input.data=inlet
+            self.inlet_from_handle_and_name[(rt.GetHandleByAnim(native_entity), suffixed_inlet_name)] = node_input
 
         # create output ports
-        output_port = node.add_output('self')
+        print(node.color())
+        output_port = node.add_output('self', multi_output=True, color=max_entity.color())
+        outlets = [outlet for outlet in MaxEntity.create(native_entity).outlets()]
+        outlet_names_with_indices = suffix_duplicates([outlet.name for outlet in outlets])
+        for outlet, suffixed_outlet_name in zip(outlets, outlet_names_with_indices):
+            node_output = node.add_output(suffixed_outlet_name, multi_output=True)
+            self.outlet_from_handle_and_name[(rt.GetHandleByAnim(native_entity), suffixed_outlet_name)] = node_output
+            node_output.data = outlet
 
         # add graph to node
         self.graph.add_node(node)
 
 
         """customize node"""
-        max_entity = MaxBaseEntity.create(native_entity)
         node.set_name(max_entity.name())
         node.set_color(*max_entity.color())
 
         # connect node to graph
         for node in self.graph.all_nodes():
             native_entity = node.data
-            ports = [port for port in MaxBaseEntity.create(native_entity).get_ports()]
+            ports = [port for port in MaxEntity.create(native_entity).inlets()]
             # add indices to duplicate named ports
             port_names_with_indices = suffix_duplicates([port.name for port in ports])
             for max_port, port_name in zip(ports, port_names_with_indices):
@@ -1102,7 +1156,7 @@ class SceneGraphDocker(QDockWidget):
             port.clear_connections(push_undo=False, emit_signal=False)
         self.graph.remove_node(node)
 
-def opengraph():
+def opengraph(native_entities=[], expand=True):
     global scenegraph
     max_window = GetQMaxMainWindow()
     scenegraph = max_window.findChild(QDockWidget, "TheSceneGraph")
@@ -1115,6 +1169,15 @@ def opengraph():
     scenegraph.move(100,0)
     scenegraph.setFloating(False)
     scenegraph.show()
+
+    if expand:
+        for native_entity in MaxEntity.bfs(native_entities):
+            scenegraph.add_entity_to_graph(native_entity)
+    else:
+        for native_entity in native_entities:
+            scenegraph.add_entity_to_graph(native_entity)
+
+
 
 
 
@@ -1132,7 +1195,7 @@ class TestNodePorts(unittest.TestCase):
         teapot = rt.Teapot()
 
         # test ports
-        node_ports = [port.name for port  in MaxBaseEntity.create(teapot).get_ports()]
+        node_ports = [port.name for port  in MaxEntity.create(teapot).inlets()]
         self.assertIn('children', node_ports)
 
     def test_children_source(self):
@@ -1142,7 +1205,7 @@ class TestNodePorts(unittest.TestCase):
         cylinder.parent = teapot
 
         # test ports
-        children = [child for child in ChildrenPort(owner=teapot).get_sources()]
+        children = [child for child in ChildrenInlet(owner=teapot).get_sources()]
         self.assertIn(cylinder, children)
 
     def test_parenting(self):
@@ -1151,7 +1214,7 @@ class TestNodePorts(unittest.TestCase):
         cylinder = rt.Cylinder()
 
         # test ports
-        children_port = ChildrenPort(owner=teapot)
+        children_port = ChildrenInlet(owner=teapot)
         children_port.connect(cylinder)
         self.assertIn(cylinder, teapot.children)
 
@@ -1162,7 +1225,7 @@ class TestNodePorts(unittest.TestCase):
         cylinder.parent = teapot
 
         # test ports
-        children_port = ChildrenPort(owner=teapot)
+        children_port = ChildrenInlet(owner=teapot)
         children_port.disconnect(cylinder)
         self.assertNotIn(cylinder, teapot.children)
 
@@ -1171,7 +1234,7 @@ class TestNodePorts(unittest.TestCase):
         teapot = rt.Teapot()
 
         # test ports
-        node_ports = [port.name for port  in MaxBaseEntity.create(teapot).get_ports()]
+        node_ports = [port.name for port  in MaxEntity.create(teapot).inlets()]
         self.assertIn('baseobject', node_ports)
 
     def test_baseobject_source(self):
@@ -1179,7 +1242,7 @@ class TestNodePorts(unittest.TestCase):
         teapot = rt.Teapot()
 
         # test ports
-        sources = [source for source in BaseObjectPort(owner=teapot).get_sources()]
+        sources = [source for source in BaseObjectInlet(owner=teapot).get_sources()]
         self.assertIn(teapot.baseobject, sources)
 
     def test_baseobject_connect(self):
@@ -1188,7 +1251,7 @@ class TestNodePorts(unittest.TestCase):
         cylinder = rt.Cylinder()
 
         # test ports
-        port = BaseObjectPort(owner=teapot)
+        port = BaseObjectInlet(owner=teapot)
         port.connect(cylinder.baseobject)
         self.assertEqual(cylinder.baseobject, teapot.baseobject)
 
@@ -1200,7 +1263,7 @@ class TestNodePorts(unittest.TestCase):
         teapot = rt.Teapot()
 
         # test ports
-        node_ports = [port.name for port  in MaxBaseEntity.create(teapot).get_ports()]
+        node_ports = [port.name for port  in MaxEntity.create(teapot).inlets()]
         self.assertIn('Transform', node_ports)
 
     def test_connecting_transform(self):
@@ -1231,8 +1294,8 @@ class TestFloatExpression(unittest.TestCase):
         teapot = rt.Teapot()
         teapot[2][0][0].controller = expression_controller
 
-        self.assertIn("my_scalar_constant", [port.name for port in MaxBaseEntity.create(expression_controller).get_ports()])
-        self.assertIn("my_vector_constant", [port.name for port in MaxBaseEntity.create(expression_controller).get_ports()])
+        self.assertIn("my_scalar_constant", [port.name for port in MaxEntity.create(expression_controller).inlets()])
+        self.assertIn("my_vector_constant", [port.name for port in MaxEntity.create(expression_controller).inlets()])
 
     def test_scalar_and_vector_targets(self):
         teapot = rt.Teapot()
@@ -1248,8 +1311,8 @@ class TestFloatExpression(unittest.TestCase):
         expression_controller.AddScalarTarget("sphere_z_pos", sphere[2][0][2].controller)
         expression_controller.SetExpression("sphere_z_pos")
 
-        expression_entity = MaxBaseEntity.create(x_subanim.controller)
-        self.assertIn("sphere_z_pos", [port.name for port in expression_entity.get_ports()])
+        expression_entity = MaxEntity.create(x_subanim.controller)
+        self.assertIn("sphere_z_pos", [port.name for port in expression_entity.inlets()])
 
     def test_connecting(self):
         pass
@@ -1299,7 +1362,7 @@ class TestListController(unittest.TestCase):
         available_subanim.controller = rt.position_xyz()
 
         # assert is_list_controller(position_list)
-        port_names = [port.name for port in MaxBaseEntity.create(position_list).get_ports()]
+        port_names = [port.name for port in MaxEntity.create(position_list).inlets()]
 
         self.assertNotEqual(len(port_names), len(set(port_names)))
         suffixed = suffix_duplicates(port_names)
@@ -1316,24 +1379,26 @@ class TestListController(unittest.TestCase):
         available_subanim.controller = rt.position_xyz()
 
         # assert is_list_controller(position_list)
-        port_names = [port.name for port in MaxBaseEntity.create(position_list).get_ports()]
+        port_names = [port.name for port in MaxEntity.create(position_list).inlets()]
         
         self.assertEqual(port_names, ['Position XYZ', 'Position XYZ', 'Weight: Position XYZ', 'Weight: Position XYZ', "available"])
 
 
-class TestWireController(unittest.TestCase):
-    def test_wire_ports(self):
-        teapot = rt.Teapot()
-        box = rt.Box()
+
 
 
 class TestReactController(unittest.TestCase):
     pass
 
+
+
 """
 TEST BEHAVIOUR
 """
 class TestControllerInstancing(unittest.TestCase):
+    def setUp(self):
+        rt.resetMAXFile(rt.Name("noPrompt"))
+
     def test_positionXYZController(self):
         # setup max scene
         teapot = rt.Teapot()
@@ -1345,7 +1410,7 @@ class TestControllerInstancing(unittest.TestCase):
         z_controller = rt.getSubanim(position_controller, 3)
 
         # test connectiing
-        ports = list( MaxBaseEntity.create(position_controller).get_ports() )
+        ports = list( MaxEntity.create(position_controller).inlets() )
         ports[0].connect(z_controller)
         ports[1].connect(z_controller)
         ports[2].connect(z_controller)
@@ -1353,25 +1418,43 @@ class TestControllerInstancing(unittest.TestCase):
         self.assertEqual(rt.getSubanim(position_controller, 1), rt.getSubanim(position_controller, 3))
 
 
+class TestWireController(unittest.TestCase):
+    def setUp(self):
+        rt.resetMAXFile(rt.Name("noPrompt"))
+    # def test_wire_ports(self):
+    #     cylinder = rt.Cylinder()
+    #     helper = rt.Point()
+
+    def test_oneway_wire(self):
+        cylinder = rt.Cylinder()
+        point = rt.Point()
+        rt.paramWire.connect(point[2][0][2], cylinder[3][1], "Z_Position")
 
 if __name__ == "__main__":
     """reset max file """
-    # rt.resetMaxFile(rt.Name("noPrompt"))
+    rt.resetMaxFile(rt.Name("noPrompt"))
 
     """individual testcases"""
-    # unittest.main(TestChildrenPort())
-    # unittest.main(TestBaseObjectPort())
+    # unittest.main(TestChildrenInlet())
+    # unittest.main(TestBaseObjectInlet())
     # unittest.main(TestControllerInstancing())
     # unittest.main(TestFloatExpression())
     # unittest.main(TestScriptController())
     # unittest.main(TestListController())
 
-    unittest.main(TestWireController())
+    # unittest.main(TestWireController())
 
     """run all tests"""
     # unittest.main()
 
     """open graph docker"""
-    # opengraph()
+    cylinder = rt.Cylinder()
+    point = rt.Point()
+    rt.paramWire.connect(point[2][0][2], cylinder[3][1], "Z_Position")
+    opengraph([
+        cylinder, cylinder.baseobject, cylinder.baseobject[1].controller,
+        point,
+        point[2].controller, point[2][0].controller
+        ], expand=False)
 
     
